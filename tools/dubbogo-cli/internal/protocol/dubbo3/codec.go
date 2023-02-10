@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package dubbo3
+package dubbo
 
 import (
 	"bufio"
