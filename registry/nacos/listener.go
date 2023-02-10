@@ -18,10 +18,11 @@
 package nacos
 
 import (
-	"bytes"
+	"encoding/json"
 	"net/url"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -38,7 +39,6 @@ import (
 
 import (
 	"dubbo.apache.org/dubbo-go/v3/common"
-	"dubbo.apache.org/dubbo-go/v3/common/constant"
 	"dubbo.apache.org/dubbo-go/v3/config_center"
 	"dubbo.apache.org/dubbo-go/v3/registry"
 	"dubbo.apache.org/dubbo-go/v3/remoting"
@@ -95,31 +95,63 @@ func generateUrl(instance model.Instance) *common.URL {
 		logger.Errorf("nacos instance metadata is empty,instance:%+v", instance)
 		return nil
 	}
-	path := instance.Metadata["path"]
-	myInterface := instance.Metadata["interface"]
-	if len(path) == 0 && len(myInterface) == 0 {
-		logger.Errorf("nacos instance metadata does not have  both path key and interface key,instance:%+v", instance)
-		return nil
+	//path := instance.Metadata["path"]
+	//myInterface := instance.Metadata["interface"]
+	//if len(path) == 0 && len(myInterface) == 0 {
+	//	logger.Errorf("nacos instance metadata does not have  both path key and interface key,instance:%+v", instance)
+	//	return nil
+	//}
+	//if len(path) == 0 && len(myInterface) != 0 {
+	//	path = "/" + myInterface
+	//}
+	//protocol := instance.Metadata["protocol"]
+	//if len(protocol) == 0 {
+	//	logger.Errorf("nacos instance metadata does not have protocol key,instance:%+v", instance)
+	//	return nil
+	//}
+	//urlMap := url.Values{}
+	//for k, v := range instance.Metadata {
+	//	urlMap.Set(k, v)
+	//}
+	//return common.NewURLWithOptions(
+	//	common.WithIp(instance.Ip),
+	//	common.WithPort(strconv.Itoa(int(instance.Port))),
+	//	common.WithProtocol(protocol),
+	//	common.WithParams(urlMap),
+	//	common.WithPath(path),
+	//)
+	if instance.Metadata["dubbo.metadata-service.urls"] != "" {
+		urls := instance.Metadata["dubbo.metadata-service.urls"]
+		urls = urls[3:]
+		urls = urls[:len(urls)-3]
+		urlArray := strings.Split(urls, "\",\"")
+		u, _ := common.NewURL(urlArray[0])
+		u.Ip = instance.Ip
+		u.Path = ""
+		return u
 	}
-	if len(path) == 0 && len(myInterface) != 0 {
-		path = "/" + myInterface
+
+	if instance.Metadata["dubbo.metadata-service.url-params"] != "" {
+		paramJson := instance.Metadata["dubbo.metadata-service.url-params"]
+		params := make(map[string]string, 0)
+		err := json.Unmarshal([]byte(paramJson), &params)
+		if err != nil {
+			logger.Fatal(err)
+		}
+		p := url.Values{}
+		for k, v := range params {
+			if k != "version" {
+				p[k] = []string{v}
+			}
+		}
+		return common.NewURLWithOptions(
+			common.WithProtocol(params["protocol"]),
+			common.WithIp(instance.Ip),
+			common.WithPort(params["port"]),
+			common.WithParams(p),
+		)
 	}
-	protocol := instance.Metadata["protocol"]
-	if len(protocol) == 0 {
-		logger.Errorf("nacos instance metadata does not have protocol key,instance:%+v", instance)
-		return nil
-	}
-	urlMap := url.Values{}
-	for k, v := range instance.Metadata {
-		urlMap.Set(k, v)
-	}
-	return common.NewURLWithOptions(
-		common.WithIp(instance.Ip),
-		common.WithPort(strconv.Itoa(int(instance.Port))),
-		common.WithProtocol(protocol),
-		common.WithParams(urlMap),
-		common.WithPath(path),
-	)
+	return nil
 }
 
 // Callback will be invoked when got subscribed events.
@@ -180,13 +212,14 @@ func (nl *nacosListener) Callback(services []model.SubscribeService, err error) 
 }
 
 func getSubscribeName(url *common.URL) string {
-	var buffer bytes.Buffer
-
-	buffer.Write([]byte(common.DubboNodes[common.PROVIDER]))
-	appendParam(&buffer, url, constant.InterfaceKey)
-	appendParam(&buffer, url, constant.VersionKey)
-	appendParam(&buffer, url, constant.GroupKey)
-	return buffer.String()
+	//var buffer bytes.Buffer
+	//
+	//buffer.Write([]byte(common.DubboNodes[common.PROVIDER]))
+	//appendParam(&buffer, url, constant.InterfaceKey)
+	//appendParam(&buffer, url, constant.VersionKey)
+	//appendParam(&buffer, url, constant.GroupKey)
+	//return buffer.String()
+	return url.GetParams().Get("bean.name")
 }
 
 func (nl *nacosListener) startListen() error {
